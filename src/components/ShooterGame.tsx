@@ -25,6 +25,30 @@ const COL = {
   shield: "#4ae3ff", laser: "#ff2b3a", bulletMe: "#6fe8ff", bulletEnemy: "#ff4a2a", gold: "#ffd45a", red: "#ff3a4a",
 };
 
+const COVER_SIZES: Record<Cover["kind"], () => { w: number; h: number }> = {
+  barrier: () => ({ w: 90 + Math.random() * 30, h: 38 }),
+  crate: () => ({ w: 44, h: 42 }),
+  barrel: () => ({ w: 30, h: 40 }),
+  case: () => ({ w: 58, h: 34 }),
+};
+const KINDS: Cover["kind"][] = ["barrier", "barrier", "crate", "crate", "barrel", "case"];
+
+// New random obstacle layout every game. Obstacles never overlap and leave open lanes between them.
+function randomCovers(WW: number, H: number, heroX: number, heroY: number): Cover[] {
+  const out: Cover[] = [];
+  const target = Math.round((WW / 400) * 4);
+  for (let tries = 0; out.length < target && tries < 400; tries++) {
+    const kind = KINDS[Math.floor(Math.random() * KINDS.length)]!;
+    const { w, h } = COVER_SIZES[kind]();
+    const x = 20 + Math.random() * (WW - 40 - w);
+    const y = H * 0.4 + Math.random() * (H * 0.46 - h);
+    if (Math.hypot(x + w / 2 - heroX, y + h / 2 - heroY) < 110) continue;
+    if (out.some((c) => x < c.x + c.w + 60 && x + w + 60 > c.x && y < c.y + c.h + 50 && y + h + 50 > c.y)) continue;
+    out.push({ x, y, w, h, kind });
+  }
+  return out;
+}
+
 export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -481,7 +505,8 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
         {countdown > 0 && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/50">
             <div key={countdown} className="font-display text-8xl text-gold-gradient animate-in zoom-in-50 fade-in duration-500">{countdown}</div>
-            <p className="px-6 text-center text-foreground">Move with the left stick. Hold 🛡️ to block. Hold 🎯, drag to aim, release to shoot! Hide behind cover — one hit and you're out!</p>
+            <p className="px-6 text-center text-foreground">Move with the left stick — walk left or right to explore. Hold 🛡️ to block. Hold 🎯, drag to aim, release to shoot!</p>
+            <p className="px-6 text-center font-display text-lg text-primary">Survive all 90s to win 100 coins</p>
           </div>
         )}
         {/* joystick */}
