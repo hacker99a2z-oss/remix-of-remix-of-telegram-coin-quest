@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { adCooldownMs, coinsToUsd, prizeForRank, seasonEndsAt } from "@/lib/rules";
+import { adCooldownMs, coinsToUsd, maxEnemiesAt, prizeForRank, rewardFor, seasonEndsAt } from "@/lib/rules";
+
+describe("game rewards & difficulty", () => {
+  it("surviving 90s pays 100 coins", () => expect(rewardFor(90)).toBe(100));
+  it("dying before 90s pays 0", () => {
+    expect(rewardFor(89)).toBe(0);
+    expect(rewardFor(10)).toBe(0);
+  });
+  it("enemies ramp 1 -> 2 -> 3 -> 4", () => {
+    expect(maxEnemiesAt(5)).toBe(1);
+    expect(maxEnemiesAt(20)).toBe(2);
+    expect(maxEnemiesAt(40)).toBe(3);
+    expect(maxEnemiesAt(80)).toBe(4);
+  });
+});
 
 describe("rules", () => {
   it("30 winners share exactly $10", () => {

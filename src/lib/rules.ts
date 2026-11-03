@@ -4,7 +4,19 @@ export const GAME_REWARD = 100;
 export const REFERRAL_REWARD = 100;
 export const REFERRAL_GAMES_NEEDED = 10;
 export const GAME_SECONDS = 90;
-// Next ad unlocks 90s after the game ends, plus whatever game time was left unplayed if the player died.
+// Coins are paid only when the hero survives the whole round.
+export function rewardFor(survivedSec: number): number {
+  return survivedSec >= GAME_SECONDS - 0.5 ? GAME_REWARD : 0;
+}
+// Max enemies alive at once ramps 1 → 2 → 3 → 4 as the round goes on.
+export function maxEnemiesAt(elapsedSec: number): number {
+  if (elapsedSec < 15) return 1;
+  if (elapsedSec < 35) return 2;
+  if (elapsedSec < 60) return 3;
+  return 4;
+}
+// Next ad unlocks 90s after an ad-unlocked game ends, plus whatever game time was left unplayed if the player died.
+// The daily free game sets no timer at all (see finishGame).
 export function adCooldownMs(survivedSec: number): number {
   const s = Math.max(0, Math.min(GAME_SECONDS, survivedSec));
   return (GAME_SECONDS + (GAME_SECONDS - s)) * 1000;
