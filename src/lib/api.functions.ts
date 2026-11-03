@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
   COINS_PER_USD,
-  GAME_REWARD,
+  rewardFor,
   adCooldownMs,
   LEADERBOARD_MIN_COINS,
   LEADERBOARD_SHOWN,
@@ -82,11 +82,15 @@ export const finishGame = createServerFn({ method: "POST" })
   })))
   .handler(async ({ data }) => {
     const { user, db } = await ctx(data);
-    const { error } = await db.rpc("finish_game", { p_tg_id: user.id, p_score: data.score, p_reward: GAME_REWARD });
+    const { data: before } = await db.from("players").select("last_play_date").eq("tg_id", user.id).single();
+    const wasFree = before?.last_play_date !== today();
+    const reward = rewardFor(data.survived);
+    const { error } = await db.rpc("finish_game", { p_tg_id: user.id, p_score: data.score, p_reward: reward });
     if (error) throw new Error(error.message.includes("no plays") ? "No plays left — watch an ad to play again" : error.message);
-    const readyAt = new Date(Date.now() + adCooldownMs(data.survived)).toISOString();
+    // Daily free game: no ad timer. Ad-unlocked game: timer based on how long the hero survived.
+    const readyAt = wasFree ? null : new Date(Date.now() + adCooldownMs(data.survived)).toISOString();
     const { data: p } = await db.from("players").update({ ad_ready_at: readyAt }).eq("tg_id", user.id).select("*").single();
-    return view(p);
+    return { ...view(p), reward };
   });
 
 export const grantAdPlay = createServerFn({ method: "POST" })
