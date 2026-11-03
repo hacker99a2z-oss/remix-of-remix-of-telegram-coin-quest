@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
-import { BadgeCheck, Headphones, History } from "lucide-react";
+import { BadgeCheck, Headphones, History, Wallet } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { usePlayer } from "@/hooks/use-player";
 import { getWithdrawals, requestWithdraw } from "@/lib/api.functions";
@@ -17,6 +17,8 @@ export const Route = createFileRoute("/withdraw")({
       { name: "description", content: "Convert your Coin Rush coins to dollars and withdraw to Trust Wallet." },
       { property: "og:title", content: "Withdraw — Coin Rush" },
       { property: "og:description", content: "Convert coins to dollars and withdraw to Trust Wallet." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Withdraw,
@@ -54,17 +56,29 @@ function Withdraw() {
 
   return (
     <AppShell title="Wallet">
-      <section className="grid grid-cols-2 gap-3">
-        <div className="rounded-3xl border bg-card p-4 shadow-card">
-          <p className="text-xs text-muted-foreground">Coins</p>
-          <p className="font-display text-2xl text-gold-gradient">{coins.toLocaleString()}</p>
+      <section className="relative overflow-hidden rounded-3xl border border-primary/30 bg-card p-5 shadow-card">
+        <div className="pointer-events-none absolute -right-10 -top-14 h-44 w-44 rounded-full bg-gold opacity-25 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-14 -left-10 h-40 w-40 rounded-full bg-coral opacity-20 blur-3xl" />
+        <div className="relative flex items-start justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Balance</p>
+            <p className="font-display text-5xl text-success">${balanceUsd.toFixed(2)}</p>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <span className="inline-block h-4 w-4 rounded-full bg-gold shadow-glow" />
+              <span className="font-display text-lg text-gold-gradient">{coins.toLocaleString()}</span> coins
+            </p>
+          </div>
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gold shadow-glow">
+            <Wallet className="h-7 w-7 text-primary-foreground" />
+          </div>
         </div>
-        <div className="rounded-3xl border bg-card p-4 shadow-card">
-          <p className="text-xs text-muted-foreground">Dollars</p>
-          <p className="font-display text-2xl text-success">${balanceUsd.toFixed(2)}</p>
+        <div className="relative mt-4 h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-full bg-gold" style={{ width: `${Math.min(100, (balanceUsd / MIN_WITHDRAW_USD) * 100)}%` }} />
         </div>
+        <p className="relative mt-1.5 text-xs text-muted-foreground">
+          {balanceUsd >= MIN_WITHDRAW_USD ? "Ready to withdraw!" : `${Math.max(0, MIN_WITHDRAW_USD * COINS_PER_USD - coins).toLocaleString()} more coins to reach $${MIN_WITHDRAW_USD}`} · {COINS_PER_USD.toLocaleString()} coins = $1
+        </p>
       </section>
-      <p className="mt-2 text-center text-xs text-muted-foreground">{COINS_PER_USD.toLocaleString()} coins = $1</p>
 
       <section className="mt-4 space-y-3 rounded-3xl border bg-card p-4 shadow-card">
         <h2 className="text-xl">Withdraw to Trust Wallet</h2>
