@@ -1,6 +1,6 @@
 import arenaBg from "@/assets/arena-bg.jpg";
 import { useEffect, useRef, useState } from "react";
-import { Crosshair, Shield } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Shield } from "lucide-react";
 import { haptic } from "@/lib/tg";
 
 // Arena shooter: enemies come from the front (top), max 3-4 at once.
@@ -13,24 +13,16 @@ const DURATION = 90;
 const TRAVEL_FRAMES = 60; // ~1s at 60fps
 
 type Bullet = { x: number; y: number; vx: number; vy: number; enemy: boolean; life: number };
-type Look = { hood: string; hoodDeep: string; skin: string; hat: "bald" | "beanie" | "bandana" | "cap"; hatCol: string; mask: string };
-type Enemy = { x: number; y: number; ty: number; cool: number; warn: number; phase: number; flash: number; dir: number; look: Look; dead: number; spin: number };
+type Enemy = { x: number; y: number; tx: number; ty: number; cool: number; warn: number; phase: number; flash: number; dir: number; dead: number; spin: number };
 type Part = { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number };
 type Float = { x: number; y: number; text: string; life: number; color: string };
-type Cover = { x: number; y: number; w: number; h: number; kind: "car" | "crate" | "barrel" };
+type Cover = { x: number; y: number; w: number; h: number; kind: "barrier" | "crate" | "barrel" | "case" };
 
+// Canvas palette matched to the military-base arena art.
 const COL = {
-  sky1: "#0b3b7a", sky2: "#2b8fe0", bldg: "#14305e", bldg2: "#1d4580", win: "#ffb347", road: "#2a2f45",
-  shield: "#7ef0ff", laser: "#ff2b4a", bulletMe: "#ffe14a", bulletEnemy: "#ff8a3d", gold: "#ffd45a", red: "#ff5a6e",
+  sky1: "#4a8fe0", sky2: "#a8d4ff", bldg: "#7c8aa8", bldg2: "#95a3c0", win: "#6fe3ff", road: "#6a6a70",
+  shield: "#4ae3ff", laser: "#ff2b3a", bulletMe: "#6fe8ff", bulletEnemy: "#ff4a2a", gold: "#ffd45a", red: "#ff3a4a",
 };
-const HERO: Look = { hood: "#3a9be8", hoodDeep: "#1f62b0", skin: "#f08a3c", hat: "cap", hatCol: "#3fb6ff", mask: "#13285a" };
-const LOOKS: Look[] = [
-  { hood: "#1f3f8f", hoodDeep: "#132a63", skin: "#c96a32", hat: "bald", hatCol: "#c96a32", mask: "#0f1f4d" },
-  { hood: "#b33a3a", hoodDeep: "#7a2222", skin: "#e0915a", hat: "beanie", hatCol: "#222", mask: "#2a0f12" },
-  { hood: "#2f7a4a", hoodDeep: "#1c4d2e", skin: "#8a5a3a", hat: "bandana", hatCol: "#e23b3b", mask: "#132a1c" },
-  { hood: "#5a3a8f", hoodDeep: "#38245c", skin: "#f0b07a", hat: "cap", hatCol: "#222", mask: "#1a1030" },
-  { hood: "#444b5a", hoodDeep: "#2a2f3a", skin: "#d07a40", hat: "beanie", hatCol: "#f0a020", mask: "#111" },
-];
 
 export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -73,10 +65,11 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
     let enemies: Enemy[] = [], bullets: Bullet[] = [], parts: Part[] = [], floats: Float[] = [];
     let score = 0, kills = 0, shake = 0, spawnCd = 30, done = false, lastHud = 0, raf = 0, survived = 0;
     const covers: Cover[] = [
-      { x: W * 0.12, y: H * 0.5, w: 70, h: 34, kind: "car" },
-      { x: W * 0.62, y: H * 0.47, w: 46, h: 36, kind: "crate" },
-      { x: W * 0.4, y: H * 0.63, w: 26, h: 34, kind: "barrel" },
-      { x: W * 0.78, y: H * 0.64, w: 42, h: 34, kind: "crate" },
+      { x: W * 0.5 - 56, y: H * 0.5, w: 112, h: 40, kind: "barrier" },
+      { x: W * 0.08, y: H * 0.44, w: 46, h: 42, kind: "crate" },
+      { x: W * 0.8, y: H * 0.56, w: 30, h: 40, kind: "barrel" },
+      { x: W * 0.14, y: H * 0.66, w: 58, h: 34, kind: "case" },
+      { x: W * 0.62, y: H * 0.7, w: 92, h: 36, kind: "barrier" },
     ];
     const stars = Array.from({ length: 30 }, () => ({ x: Math.random() * W, y: Math.random() * H * 0.25, r: Math.random() * 1.5 + 0.5 }));
     const blds = Array.from({ length: 7 }, (_, i) => ({ x: (i / 7) * W - 10, w: W / 7 + 14, h: H * (0.12 + Math.random() * 0.15), seed: Math.random() }));
@@ -93,75 +86,96 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
     const fireBullet = (sx: number, sy: number, tx: number, ty: number, enemy: boolean) => {
       bullets.push({ x: sx, y: sy, vx: (tx - sx) / TRAVEL_FRAMES, vy: (ty - sy) / TRAVEL_FRAMES, enemy, life: TRAVEL_FRAMES * 3 });
     };
+    // Enemies march out of the base gate, then spread out across the yard.
     const spawnEnemy = () => {
-      enemies.push({ x: 40 + Math.random() * (W - 80), y: -40, ty: H * (0.2 + Math.random() * 0.2), cool: 90 + Math.random() * 90, warn: 0, phase: Math.random() * 6, flash: 0, dir: Math.random() < 0.5 ? -1 : 1, look: LOOKS[Math.floor(Math.random() * LOOKS.length)]!, dead: 0, spin: Math.random() < 0.5 ? -1 : 1 });
+      enemies.push({ x: W / 2 + (Math.random() - 0.5) * 60, y: H * 0.28, tx: 40 + Math.random() * (W - 80), ty: H * (0.32 + Math.random() * 0.12), cool: 90 + Math.random() * 90, warn: 0, phase: Math.random() * 6, flash: 0, dir: Math.random() < 0.5 ? -1 : 1, dead: 0, spin: Math.random() < 0.5 ? -1 : 1 });
     };
+    const depth = (y: number) => 0.5 + 0.75 * Math.max(0, Math.min(1, y / H));
     const finish = (delay: number) => {
       if (done) return;
       done = true;
       setTimeout(() => endRef.current(score, survived), delay);
     };
 
-    // Chibi street character, facing the viewer. gunA = gun angle in world space.
-    const drawGuy = (L: Look, walk: number, gunA: number, flash: number, warn: boolean, scale: number) => {
-      ctx.save(); ctx.scale(scale, scale);
-      const step = Math.sin(walk) * 4;
-      ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(0, 30, 24, 7, 0, 0, Math.PI * 2); ctx.fill();
-      // legs + shoes
-      ctx.fillStyle = L.hoodDeep;
-      ctx.beginPath(); ctx.roundRect(-13, 8, 11, 18 + step, 4); ctx.roundRect(2, 8, 11, 18 - step, 4); ctx.fill();
-      ctx.fillStyle = "#1a1a2a"; ctx.beginPath(); ctx.ellipse(-8, 27 + step, 8, 4, 0, 0, Math.PI * 2); ctx.ellipse(8, 27 - step, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.translate(0, Math.abs(Math.sin(walk)) * -2);
-      // hoodie
-      const g = ctx.createLinearGradient(0, -22, 0, 12); g.addColorStop(0, L.hood); g.addColorStop(1, L.hoodDeep);
-      ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(-18, -20, 36, 32, 12); ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-3, -16); ctx.lineTo(-4, -6); ctx.moveTo(3, -16); ctx.lineTo(4, -6); ctx.stroke();
-      ctx.fillStyle = "rgba(0,0,0,0.15)"; ctx.fillRect(-12, 0, 24, 6);
-      // head (big)
-      ctx.fillStyle = L.skin; ctx.beginPath(); ctx.ellipse(0, -36, 17, 16, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(-17, -35, 4, 0, Math.PI * 2); ctx.arc(17, -35, 4, 0, Math.PI * 2); ctx.fill();
-      // mask over lower face
-      ctx.fillStyle = L.mask; ctx.beginPath(); ctx.moveTo(-17, -36); ctx.quadraticCurveTo(0, -30, 17, -36); ctx.lineTo(15, -24); ctx.quadraticCurveTo(0, -16, -15, -24); ctx.fill();
-      // angry eyes
-      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(-6, -40, 4.5, 5, 0, 0, Math.PI * 2); ctx.ellipse(6, -40, 4.5, 5, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = warn ? COL.laser : "#1a1a1a"; ctx.beginPath(); ctx.arc(-5, -39, 2.4, 0, Math.PI * 2); ctx.arc(5, -39, 2.4, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#3a1a0a"; ctx.lineWidth = 3; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(-11, -48); ctx.lineTo(-2, -45); ctx.moveTo(11, -48); ctx.lineTo(2, -45); ctx.stroke();
-      // headwear
-      if (L.hat === "cap") {
-        ctx.fillStyle = L.hatCol; ctx.beginPath(); ctx.arc(0, -46, 17, Math.PI, 0); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(-12, -47, 14, 4, -0.25, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#d8283a"; ctx.beginPath(); ctx.moveTo(4, -60); ctx.quadraticCurveTo(18, -62, 20, -50); ctx.quadraticCurveTo(12, -56, 4, -52); ctx.fill();
-        ctx.fillStyle = "rgba(255,255,255,0.25)"; ctx.beginPath(); ctx.arc(-4, -54, 5, Math.PI, 0); ctx.fill();
-      } else if (L.hat === "beanie") {
-        ctx.fillStyle = L.hatCol; ctx.beginPath(); ctx.arc(0, -46, 17, Math.PI, 0); ctx.fill(); ctx.fillRect(-17, -48, 34, 5);
-        ctx.beginPath(); ctx.arc(0, -64, 4, 0, Math.PI * 2); ctx.fill();
-      } else if (L.hat === "bandana") {
-        ctx.fillStyle = L.hatCol; ctx.beginPath(); ctx.arc(0, -46, 17, Math.PI, 0); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(16, -48); ctx.lineTo(25, -44); ctx.lineTo(22, -52); ctx.fill();
-      } else { ctx.fillStyle = "rgba(255,255,255,0.18)"; ctx.beginPath(); ctx.ellipse(-5, -48, 6, 3, -0.4, 0, Math.PI * 2); ctx.fill(); }
-      // arms + gun
-      ctx.save(); ctx.translate(10, -6); ctx.rotate(gunA);
-      ctx.fillStyle = L.hood; ctx.beginPath(); ctx.roundRect(-4, -5, 18, 10, 5); ctx.fill();
-      ctx.fillStyle = L.skin; ctx.beginPath(); ctx.arc(15, 0, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#4a4a50"; ctx.beginPath(); ctx.roundRect(12, -5, 26, 8, 2); ctx.fill(); ctx.fillStyle = "#2a2a30"; ctx.fillRect(16, 2, 6, 8);
-      if (flash > 0) { ctx.fillStyle = COL.bulletMe; ctx.shadowColor = COL.bulletMe; ctx.shadowBlur = 20; ctx.beginPath(); ctx.moveTo(38, -1); ctx.lineTo(38 + 18 * flash, -9); ctx.lineTo(38 + 12 * flash, -1); ctx.lineTo(38 + 20 * flash, 7); ctx.fill(); }
+    // Red/black armored soldier facing the viewer. gunA = gun angle in world space.
+    const drawSoldier = (walk: number, gunA: number, flash: number, warn: boolean, sc: number) => {
+      ctx.save(); ctx.scale(sc, sc);
+      const step = Math.sin(walk) * 3;
+      ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(0, 30, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
+      // legs, knee pads, boots
+      ctx.fillStyle = "#1c1d26"; ctx.beginPath(); ctx.roundRect(-12, 6, 10, 22 + step, 4); ctx.roundRect(2, 6, 10, 22 - step, 4); ctx.fill();
+      ctx.fillStyle = "#c8202e"; ctx.beginPath(); ctx.roundRect(-12, 14 + step / 2, 10, 6, 2); ctx.roundRect(2, 14 - step / 2, 10, 6, 2); ctx.fill();
+      ctx.fillStyle = "#0e0e14"; ctx.beginPath(); ctx.ellipse(-7, 28 + step, 7, 4, 0, 0, Math.PI * 2); ctx.ellipse(7, 28 - step, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
+      // torso armor
+      const g = ctx.createLinearGradient(0, -22, 0, 8); g.addColorStop(0, "#343744"); g.addColorStop(1, "#15161e");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(-17, -22, 34, 30, 9); ctx.fill();
+      ctx.fillStyle = "#d22a35"; ctx.beginPath(); ctx.roundRect(-11, -18, 22, 13, 5); ctx.fill();
+      ctx.fillStyle = "#ff6a5a"; ctx.fillRect(-7, -14, 14, 2);
+      ctx.fillStyle = "#b81e2a"; ctx.beginPath(); ctx.arc(-17, -17, 7, 0, Math.PI * 2); ctx.arc(17, -17, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#0e0e14"; ctx.fillRect(-16, 3, 32, 5);
+      // helmet + glowing visor
+      ctx.fillStyle = "#22242e"; ctx.beginPath(); ctx.ellipse(0, -38, 16, 15, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#c8202e"; ctx.beginPath(); ctx.ellipse(0, -50, 5, 4, 0, Math.PI, 0); ctx.fill(); ctx.fillRect(-2, -53, 4, 10);
+      ctx.fillStyle = "rgba(255,255,255,0.18)"; ctx.beginPath(); ctx.ellipse(-6, -46, 6, 3, -0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.shadowColor = COL.laser; ctx.shadowBlur = warn ? 18 : 8;
+      ctx.fillStyle = warn ? "#ffd0d0" : "#ff2b3a"; ctx.beginPath(); ctx.roundRect(-12, -41, 24, 7, 3.5); ctx.fill(); ctx.restore();
+      // arm + rifle
+      ctx.save(); ctx.translate(10, -8); ctx.rotate(gunA);
+      ctx.fillStyle = "#2a2c38"; ctx.beginPath(); ctx.roundRect(-4, -5, 18, 10, 5); ctx.fill();
+      ctx.fillStyle = "#2a2a32"; ctx.beginPath(); ctx.roundRect(10, -4, 32, 8, 2); ctx.fill();
+      ctx.fillStyle = "#e23040"; ctx.fillRect(18, -4, 10, 3); ctx.fillStyle = "#15151a"; ctx.fillRect(16, 3, 6, 8);
+      if (flash > 0) { ctx.fillStyle = COL.bulletEnemy; ctx.shadowColor = COL.bulletEnemy; ctx.shadowBlur = 20; ctx.beginPath(); ctx.moveTo(42, -1); ctx.lineTo(42 + 18 * flash, -9); ctx.lineTo(42 + 12 * flash, -1); ctx.lineTo(42 + 20 * flash, 7); ctx.fill(); }
       ctx.restore();
       ctx.restore();
     };
 
+    // Hero seen from behind: brown spiky hair, white/blue armor, energy shield on the left arm.
     const drawHero = (t: number) => {
       ctx.save(); ctx.translate(p.x, p.y);
       if (p.dead > 0) { ctx.rotate(p.dead * 1.4); ctx.globalAlpha = Math.max(0.2, 1 - p.dead * 0.6); }
-      drawGuy(HERO, p.walk, p.gunA, p.recoil, false, 1.05);
+      ctx.save(); ctx.scale(1.2, 1.2);
+      const step = Math.sin(p.walk) * 3;
+      ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(0, 30, 24, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#1a2440"; ctx.beginPath(); ctx.roundRect(-13, 6, 11, 22 + step, 4); ctx.roundRect(2, 6, 11, 22 - step, 4); ctx.fill();
+      ctx.fillStyle = "#2f6fe0"; ctx.beginPath(); ctx.roundRect(-13, 14 + step / 2, 11, 6, 2); ctx.roundRect(2, 14 - step / 2, 11, 6, 2); ctx.fill();
+      ctx.fillStyle = "#e8eef8"; ctx.beginPath(); ctx.ellipse(-7, 28 + step, 8, 4, 0, 0, Math.PI * 2); ctx.ellipse(8, 28 - step, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.translate(0, Math.abs(Math.sin(p.walk)) * -2);
+      const g = ctx.createLinearGradient(0, -24, 0, 8); g.addColorStop(0, "#eef3fb"); g.addColorStop(1, "#8fa2c0");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(-19, -24, 38, 32, 10); ctx.fill();
+      ctx.fillStyle = "#2f6fe0"; ctx.beginPath(); ctx.arc(-19, -18, 8, 0, Math.PI * 2); ctx.arc(19, -18, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#26314d"; ctx.beginPath(); ctx.roundRect(-11, -18, 22, 20, 5); ctx.fill();
+      ctx.save(); ctx.shadowColor = COL.shield; ctx.shadowBlur = 8; ctx.fillStyle = COL.shield;
+      ctx.fillRect(-7, -13, 4, 3); ctx.fillRect(3, -13, 4, 3); ctx.fillRect(-6, -4, 12, 2); ctx.restore();
+      ctx.fillStyle = "#1a2440"; ctx.fillRect(-18, 3, 36, 5);
+      // head from behind: ears + spiky brown hair
+      ctx.fillStyle = "#f0b48a"; ctx.beginPath(); ctx.arc(-15, -37, 4, 0, Math.PI * 2); ctx.arc(15, -37, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#6b3f1f"; ctx.beginPath(); ctx.ellipse(0, -40, 16, 16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      for (const [bx, tx2, ty2] of [[-14, -18, -56], [-8, -8, -62], [0, 2, -64], [6, 12, -60], [12, 19, -52]] as const) { ctx.moveTo(bx, -48); ctx.lineTo(tx2, ty2); ctx.lineTo(bx + 8, -50); }
+      ctx.fill();
+      ctx.fillStyle = "#8a5530"; ctx.beginPath(); ctx.ellipse(-4, -46, 6, 3, -0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#2f6fe0"; ctx.fillRect(-16, -30, 32, 4);
+      // gun arm
+      ctx.save(); ctx.translate(14, -12); ctx.rotate(p.gunA);
+      ctx.fillStyle = "#2f6fe0"; ctx.beginPath(); ctx.roundRect(-4, -5, 18, 10, 5); ctx.fill();
+      ctx.fillStyle = "#c8d2e0"; ctx.beginPath(); ctx.roundRect(12, -5, 26, 9, 3); ctx.fill();
+      ctx.fillStyle = COL.shield; ctx.fillRect(18, -3, 12, 2); ctx.fillStyle = "#3a4560"; ctx.fillRect(16, 3, 6, 8);
+      if (p.recoil > 0) { ctx.fillStyle = COL.bulletMe; ctx.shadowColor = COL.bulletMe; ctx.shadowBlur = 20; ctx.beginPath(); ctx.moveTo(38, -1); ctx.lineTo(38 + 18 * p.recoil, -9); ctx.lineTo(38 + 12 * p.recoil, -1); ctx.lineTo(38 + 20 * p.recoil, 7); ctx.fill(); }
+      ctx.restore();
+      ctx.restore();
+      // energy shield: resting on the left arm, swings to the front when held
       const s = p.shieldT;
-      if (s > 0.02 && p.dead === 0) {
-        const sx = -26 + s * 26, sy = -10 - s * 54, sw = 20 + s * 50, sh = 30 - s * 12;
+      if (p.dead === 0) {
+        const sx = -30 + s * 30, sy = -14 - s * 50, sw = 14 + s * 62, sh = 44 - s * 18;
         ctx.save(); ctx.translate(sx, sy);
-        ctx.shadowColor = COL.shield; ctx.shadowBlur = 10 + s * 25;
-        ctx.fillStyle = `rgba(126,240,255,${0.35 + s * 0.3})`; ctx.strokeStyle = COL.shield; ctx.lineWidth = 3;
+        ctx.shadowColor = COL.shield; ctx.shadowBlur = 12 + s * 22;
+        const sg = ctx.createRadialGradient(0, 0, 2, 0, 0, Math.max(sw, sh) / 2);
+        sg.addColorStop(0, `rgba(74,227,255,${0.15 + s * 0.2})`); sg.addColorStop(1, `rgba(47,111,224,${0.45 + s * 0.25})`);
+        ctx.fillStyle = sg; ctx.strokeStyle = COL.shield; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.ellipse(0, 0, sw / 2, sh / 2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        if (s > 0.5) { ctx.globalAlpha *= 0.5 + 0.5 * Math.sin(t / 80); ctx.beginPath(); ctx.ellipse(0, 0, sw / 2 + 5, sh / 2 + 4, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+        ctx.strokeStyle = "rgba(220,250,255,0.7)"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(0, 0, sw / 2 - 5, sh / 2 - 5, 0, Math.PI * 1.15, Math.PI * 1.6); ctx.stroke();
+        if (s > 0.5) { ctx.globalAlpha *= 0.5 + 0.5 * Math.sin(t / 80); ctx.strokeStyle = COL.shield; ctx.beginPath(); ctx.ellipse(0, 0, sw / 2 + 5, sh / 2 + 4, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
         ctx.restore();
       }
       ctx.restore();
@@ -171,7 +185,7 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       ctx.save(); ctx.translate(e.x, e.y);
       if (e.dead > 0) { const k = Math.min(1, e.dead); ctx.translate(e.spin * k * 20, -Math.sin(k * Math.PI) * 25); ctx.rotate(e.spin * k * 1.6); ctx.globalAlpha = 1 - k; }
       const ang = Math.atan2(p.y - e.y, p.x - e.x);
-      drawGuy(e.look, t / 120 + e.phase, ang, e.flash, e.warn > 0, 0.85);
+      drawSoldier(t / 120 + e.phase, ang, e.flash, e.warn > 0, depth(e.y));
       ctx.restore();
       if (e.warn > 0 && e.dead === 0) {
         ctx.save(); ctx.globalAlpha = 0.35 * Math.abs(Math.sin(t / 50)); ctx.strokeStyle = COL.bulletEnemy; ctx.setLineDash([4, 6]); ctx.lineWidth = 2;
@@ -181,20 +195,32 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
 
     const drawCover = (c: Cover) => {
       ctx.save(); ctx.translate(c.x, c.y);
-      ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(c.w / 2, c.h, c.w / 2 + 4, 6, 0, 0, Math.PI * 2); ctx.fill();
-      if (c.kind === "car") {
-        ctx.fillStyle = "#6a3fc0"; ctx.beginPath(); ctx.roundRect(0, 8, c.w, c.h - 12, 8); ctx.fill();
-        ctx.fillStyle = "#8a5ae0"; ctx.beginPath(); ctx.roundRect(12, 0, c.w - 26, 14, 6); ctx.fill();
-        ctx.fillStyle = "#9fd8ff"; ctx.fillRect(16, 3, c.w - 34, 8);
-        ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(14, c.h - 4, 6, 0, Math.PI * 2); ctx.arc(c.w - 14, c.h - 4, 6, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = COL.gold; ctx.fillRect(c.w - 6, 14, 5, 4);
+      ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.beginPath(); ctx.ellipse(c.w / 2, c.h, c.w / 2 + 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+      if (c.kind === "barrier") {
+        // concrete jersey barrier with yellow/black hazard band
+        ctx.fillStyle = "#a9a59a"; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(c.w - 6, 0); ctx.lineTo(c.w, c.h); ctx.lineTo(0, c.h); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#c9c5ba"; ctx.fillRect(6, 0, c.w - 12, 5);
+        ctx.save(); ctx.beginPath(); ctx.rect(4, 11, c.w - 8, 14); ctx.clip();
+        ctx.fillStyle = "#f2c230"; ctx.fillRect(4, 11, c.w - 8, 14);
+        ctx.fillStyle = "#1e1e22"; for (let x = -10; x < c.w + 10; x += 16) { ctx.beginPath(); ctx.moveTo(x, 25); ctx.lineTo(x + 8, 25); ctx.lineTo(x + 16, 11); ctx.lineTo(x + 8, 11); ctx.fill(); }
+        ctx.restore();
+        ctx.fillStyle = "#8a867c"; ctx.fillRect(0, c.h - 5, c.w, 5);
       } else if (c.kind === "crate") {
-        ctx.fillStyle = "#b5793a"; ctx.fillRect(0, 0, c.w, c.h); ctx.strokeStyle = "#7a4e22"; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.w - 3, c.h - 3);
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(c.w, c.h); ctx.moveTo(c.w, 0); ctx.lineTo(0, c.h); ctx.stroke();
+        ctx.fillStyle = "#c98a45"; ctx.fillRect(0, 0, c.w, c.h);
+        ctx.strokeStyle = "#8a5526"; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, c.w - 3, c.h - 3);
+        ctx.lineWidth = 2; for (let y = c.h / 3; y < c.h; y += c.h / 3) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(c.w, y); ctx.stroke(); }
+        ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(3, c.h - 3); ctx.lineTo(c.w - 3, 3); ctx.stroke();
+        ctx.fillStyle = "rgba(255,230,180,0.25)"; ctx.fillRect(3, 3, c.w - 6, 4);
+      } else if (c.kind === "barrel") {
+        const bg = ctx.createLinearGradient(0, 0, c.w, 0); bg.addColorStop(0, "#a82a18"); bg.addColorStop(0.4, "#e8502e"); bg.addColorStop(1, "#8a2010");
+        ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(0, 0, c.w, c.h, 5); ctx.fill();
+        ctx.fillStyle = "#e8e8e8"; ctx.fillRect(0, 9, c.w, 4); ctx.fillRect(0, c.h - 13, c.w, 4);
+        ctx.fillStyle = "#6a1a0c"; ctx.beginPath(); ctx.ellipse(c.w / 2, 2, c.w / 2 - 2, 3, 0, 0, Math.PI * 2); ctx.fill();
       } else {
-        ctx.fillStyle = "#d84a2a"; ctx.beginPath(); ctx.roundRect(0, 0, c.w, c.h, 5); ctx.fill();
-        ctx.fillStyle = "#a83218"; ctx.fillRect(0, 9, c.w, 3); ctx.fillRect(0, c.h - 12, c.w, 3);
-        ctx.fillStyle = COL.gold; ctx.beginPath(); ctx.arc(c.w / 2, c.h / 2, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#4f7a3a"; ctx.beginPath(); ctx.roundRect(0, 0, c.w, c.h, 4); ctx.fill();
+        ctx.fillStyle = "#6a9a4c"; ctx.fillRect(2, 2, c.w - 4, 5);
+        ctx.fillStyle = "#33502a"; ctx.fillRect(0, c.h / 2 - 1, c.w, 3);
+        ctx.fillStyle = "#e0b040"; ctx.fillRect(8, c.h / 2 - 4, 6, 8); ctx.fillRect(c.w - 14, c.h / 2 - 4, 6, 8);
       }
       ctx.restore();
     };
@@ -244,7 +270,7 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       if (!done) {
         const sp = (inp.shield ? 2.4 : 4.2) * dt;
         const nx = Math.max(28, Math.min(W - 28, p.x + inp.mx * sp));
-        const ny = Math.max(H * 0.5, Math.min(H - 40, p.y + inp.my * sp));
+        const ny = Math.max(H * 0.55, Math.min(H - 40, p.y + inp.my * sp));
         if (!covers.some((c) => nx > c.x - 14 && nx < c.x + c.w + 14 && ny > c.y && ny < c.y + c.h + 30)) { p.x = nx; p.y = ny; }
         if (Math.hypot(inp.mx, inp.my) > 0.1) p.walk += 0.25 * dt;
       }
@@ -279,7 +305,8 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       for (const e of enemies) {
         if (e.dead > 0) { e.dead += 0.035 * dt; continue; }
         e.y += (e.ty - e.y) * 0.03 * dt;
-        e.x += e.dir * 0.8 * dt;
+        if (Math.abs(e.y - e.ty) > 30) e.x += (e.tx - e.x) * 0.04 * dt;
+        else e.x += e.dir * 0.8 * dt;
         if (e.x < 30 || e.x > W - 30) e.dir *= -1;
         e.flash = Math.max(0, e.flash - 0.08 * dt);
         if (done || Math.abs(e.y - e.ty) > 30) continue;
@@ -338,15 +365,18 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       for (const c of covers) drawCover(c);
       for (const e of enemies) if (e.y >= H * 0.5) drawEnemy(e, t);
 
-      // laser sight
+      // laser sight + crosshair (white ring, red ticks)
       if (inp.aiming && !done) {
         ctx.save();
         ctx.strokeStyle = COL.laser; ctx.shadowColor = COL.laser; ctx.shadowBlur = 12; ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.8 + 0.2 * Math.sin(t / 60);
+        ctx.globalAlpha = 0.7 + 0.2 * Math.sin(t / 60);
         ctx.beginPath(); ctx.moveTo(gunX, gunY); ctx.lineTo(inp.aimX, inp.aimY); ctx.stroke();
-        ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(inp.aimX, inp.aimY, 14 + Math.sin(t / 120) * 2, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = COL.laser; ctx.beginPath(); ctx.arc(inp.aimX, inp.aimY, 3.5, 0, Math.PI * 2); ctx.fill();
-        for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 2 + t / 400; ctx.beginPath(); ctx.moveTo(inp.aimX + Math.cos(a) * 18, inp.aimY + Math.sin(a) * 18); ctx.lineTo(inp.aimX + Math.cos(a) * 25, inp.aimY + Math.sin(a) * 25); ctx.stroke(); }
+        ctx.globalAlpha = 1; ctx.shadowBlur = 6;
+        const r = 16 + Math.sin(t / 120) * 1.5;
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(inp.aimX, inp.aimY, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = COL.laser; ctx.lineWidth = 3;
+        for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 2; ctx.beginPath(); ctx.moveTo(inp.aimX + Math.cos(a) * (r - 6), inp.aimY + Math.sin(a) * (r - 6)); ctx.lineTo(inp.aimX + Math.cos(a) * (r + 8), inp.aimY + Math.sin(a) * (r + 8)); ctx.stroke(); }
+        ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(inp.aimX, inp.aimY, 3, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
 
@@ -438,25 +468,29 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
         {/* joystick */}
         <div
           onPointerDown={joyDown} onPointerMove={joyMove} onPointerUp={joyUp} onPointerCancel={joyUp}
-          className="absolute bottom-6 left-5 flex h-32 w-32 touch-none items-center justify-center rounded-full border-2 border-primary/40 bg-card/40 backdrop-blur"
+          className="absolute bottom-6 left-5 flex h-32 w-32 touch-none items-center justify-center rounded-full border-2 border-foreground/70 bg-background/30 backdrop-blur-sm"
         >
-          <div className="h-14 w-14 rounded-full bg-gold shadow-glow" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
+          <ChevronUp className="absolute top-1 h-4 w-4 text-foreground/80" />
+          <ChevronDown className="absolute bottom-1 h-4 w-4 text-foreground/80" />
+          <ChevronLeft className="absolute left-1 h-4 w-4 text-foreground/80" />
+          <ChevronRight className="absolute right-1 h-4 w-4 text-foreground/80" />
+          <div className="h-14 w-14 rounded-full border-2 border-foreground/80 bg-hud-blue glow-blue" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
         </div>
         {/* shield + shoot */}
         <button
           onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); shieldSet(true); }}
           onPointerUp={() => shieldSet(false)} onPointerCancel={() => shieldSet(false)}
-          className={`absolute bottom-36 right-24 flex h-16 w-16 touch-none items-center justify-center rounded-full border-2 transition-transform ${shieldOn ? "scale-110 border-secondary bg-secondary text-secondary-foreground shadow-glow" : "border-secondary/60 bg-card/60 text-foreground"}`}
+          className={`absolute bottom-36 right-6 flex h-[72px] w-[72px] touch-none items-center justify-center rounded-full border-4 border-hud-blue glow-blue transition-transform ${shieldOn ? "scale-110 bg-hud-blue/70" : "bg-background/50"}`}
           aria-label="Shield"
         >
-          <Shield className="h-7 w-7" />
+          <Shield className="h-9 w-9 fill-hud-blue/60 text-foreground" />
         </button>
         <button
           onPointerDown={shootDown} onPointerMove={shootMove} onPointerUp={shootUp} onPointerCancel={shootUp}
-          className={`absolute bottom-6 right-5 flex h-24 w-24 touch-none items-center justify-center rounded-full border-2 transition-transform ${aimOn ? "scale-110 border-destructive bg-destructive text-destructive-foreground shadow-glow" : "border-destructive/60 bg-card/60 text-foreground"}`}
+          className={`absolute bottom-6 right-5 flex h-24 w-24 touch-none items-center justify-center rounded-full border-4 border-hud-orange glow-orange transition-transform ${aimOn ? "scale-110 bg-hud-orange/60" : "bg-background/60"}`}
           aria-label="Shoot"
         >
-          <Crosshair className="h-10 w-10" />
+          <Crosshair className="h-11 w-11 text-foreground" />
         </button>
       </div>
     </div>

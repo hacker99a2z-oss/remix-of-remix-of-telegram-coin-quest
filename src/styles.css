@@ -31,6 +31,8 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-gold: var(--gold);
+  --color-hud-blue: var(--hud-blue);
+  --color-hud-orange: var(--hud-orange);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -56,6 +58,8 @@
   --destructive-foreground: oklch(0.98 0 0);
   --success: oklch(0.78 0.17 155);
   --gold: oklch(0.87 0.16 88);
+  --hud-blue: oklch(0.68 0.18 245);
+  --hud-orange: oklch(0.72 0.19 50);
   --border: oklch(0.36 0.05 220);
   --input: oklch(0.34 0.05 220);
   --ring: oklch(0.84 0.17 80);
@@ -85,6 +89,8 @@
 @utility bg-coral { background-image: var(--gradient-coral); }
 @utility shadow-glow { box-shadow: var(--shadow-glow); }
 @utility shadow-card { box-shadow: var(--shadow-card); }
+@utility glow-blue { box-shadow: 0 0 18px 2px color-mix(in oklab, var(--hud-blue) 75%, transparent), inset 0 0 12px color-mix(in oklab, var(--hud-blue) 50%, transparent); }
+@utility glow-orange { box-shadow: 0 0 22px 4px color-mix(in oklab, var(--hud-orange) 80%, transparent), inset 0 0 14px color-mix(in oklab, var(--hud-orange) 55%, transparent); }
 @utility text-gold-gradient {
   background-image: var(--gradient-gold);
   -webkit-background-clip: text;
