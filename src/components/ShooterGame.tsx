@@ -2,6 +2,7 @@ import arenaBg from "@/assets/arena-bg.jpg";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Shield } from "lucide-react";
 import { haptic } from "@/lib/tg";
+import { maxEnemiesAt } from "@/lib/rules";
 
 // Arena shooter: enemies come from the front (top), max 3-4 at once.
 // Left joystick moves the hero. Hold SHIELD to raise the shield in front.
@@ -61,18 +62,13 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
     resize();
     window.addEventListener("resize", resize);
 
-    const p = { x: W / 2, y: H * 0.8, walk: 0, dead: 0, shieldT: 0, recoil: 0, gunA: -Math.PI / 2 };
+    // The arena is 3 screens wide; the camera follows the hero left and right.
+    const WW = W * 3;
+    const p = { x: WW / 2, y: H * 0.8, walk: 0, dead: 0, shieldT: 0, recoil: 0, gunA: -Math.PI / 2 };
+    let camX = WW / 2 - W / 2;
     let enemies: Enemy[] = [], bullets: Bullet[] = [], parts: Part[] = [], floats: Float[] = [];
     let score = 0, kills = 0, shake = 0, spawnCd = 30, done = false, lastHud = 0, raf = 0, survived = 0;
-    const covers: Cover[] = [
-      { x: W * 0.5 - 56, y: H * 0.5, w: 112, h: 40, kind: "barrier" },
-      { x: W * 0.08, y: H * 0.44, w: 46, h: 42, kind: "crate" },
-      { x: W * 0.8, y: H * 0.56, w: 30, h: 40, kind: "barrel" },
-      { x: W * 0.14, y: H * 0.66, w: 58, h: 34, kind: "case" },
-      { x: W * 0.62, y: H * 0.7, w: 92, h: 36, kind: "barrier" },
-    ];
-    const stars = Array.from({ length: 30 }, () => ({ x: Math.random() * W, y: Math.random() * H * 0.25, r: Math.random() * 1.5 + 0.5 }));
-    const blds = Array.from({ length: 7 }, (_, i) => ({ x: (i / 7) * W - 10, w: W / 7 + 14, h: H * (0.12 + Math.random() * 0.15), seed: Math.random() }));
+    const covers = randomCovers(WW, H, p.x, p.y);
     const start = performance.now();
     let last = start;
     const inp = input.current;
@@ -86,9 +82,11 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
     const fireBullet = (sx: number, sy: number, tx: number, ty: number, enemy: boolean) => {
       bullets.push({ x: sx, y: sy, vx: (tx - sx) / TRAVEL_FRAMES, vy: (ty - sy) / TRAVEL_FRAMES, enemy, life: TRAVEL_FRAMES * 3 });
     };
-    // Enemies march out of the base gate, then spread out across the yard.
+    // Enemies appear at the far end of the yard near the hero's view, then hunt him down.
+    // tx is unused; ty = how close (px) this enemy likes to get before strafing.
     const spawnEnemy = () => {
-      enemies.push({ x: W / 2 + (Math.random() - 0.5) * 60, y: H * 0.28, tx: 40 + Math.random() * (W - 80), ty: H * (0.32 + Math.random() * 0.12), cool: 90 + Math.random() * 90, warn: 0, phase: Math.random() * 6, flash: 0, dir: Math.random() < 0.5 ? -1 : 1, dead: 0, spin: Math.random() < 0.5 ? -1 : 1 });
+      const x = Math.max(40, Math.min(WW - 40, camX + 40 + Math.random() * (W - 80)));
+      enemies.push({ x, y: H * 0.3, tx: x, ty: 150 + Math.random() * 90, cool: 100 + Math.random() * 80, warn: 0, phase: Math.random() * 6, flash: 0, dir: Math.random() < 0.5 ? -1 : 1, dead: 0, spin: Math.random() < 0.5 ? -1 : 1 });
     };
     const depth = (y: number) => 0.5 + 0.75 * Math.max(0, Math.min(1, y / H));
     const finish = (delay: number) => {
@@ -225,39 +223,28 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       ctx.restore();
     };
 
-    const drawBg = (t: number) => {
+    // Background tiles across the wide arena; every other tile is mirrored so the edges join seamlessly.
+    const drawBg = () => {
       if (bgImg.complete && bgImg.naturalWidth) {
         const s = Math.max(W / bgImg.naturalWidth, H / bgImg.naturalHeight);
-        const iw = bgImg.naturalWidth * s, ih = bgImg.naturalHeight * s;
-        ctx.drawImage(bgImg, (W - iw) / 2, (H - ih) / 2, iw, ih);
+        const iw = bgImg.naturalWidth * s, ih = bgImg.naturalHeight * s, oy = (H - ih) / 2;
+        const x0 = WW / 2 - iw / 2;
+        const kFrom = Math.floor((camX - x0) / iw), kTo = Math.floor((camX + W - x0) / iw);
+        for (let k = kFrom; k <= kTo; k++) {
+          const x = x0 + k * iw;
+          if (Math.abs(k) % 2 === 1) { ctx.save(); ctx.translate(x + iw, oy); ctx.scale(-1, 1); ctx.drawImage(bgImg, 0, 0, iw, ih); ctx.restore(); }
+          else ctx.drawImage(bgImg, x, oy, iw, ih);
+        }
         return;
       }
-      const sky = ctx.createLinearGradient(0, 0, 0, H * 0.45); sky.addColorStop(0, COL.sky1); sky.addColorStop(1, COL.sky2);
-      ctx.fillStyle = sky; ctx.fillRect(-20, -20, W + 40, H * 0.45 + 20);
-      ctx.fillStyle = "#fff"; for (const s of stars) { ctx.globalAlpha = 0.4 + 0.4 * Math.sin(t / 500 + s.x); ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill(); }
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#ffe9b0"; ctx.shadowColor = "#ffe9b0"; ctx.shadowBlur = 30; ctx.beginPath(); ctx.arc(W * 0.82, H * 0.08, 16, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
-      for (const b of blds) {
-        const top = H * 0.42 - b.h;
-        ctx.fillStyle = b.seed > 0.5 ? COL.bldg : COL.bldg2; ctx.fillRect(b.x, top, b.w, b.h + 4);
-        for (let wy = top + 10; wy < H * 0.4; wy += 16) for (let wx = b.x + 8; wx < b.x + b.w - 10; wx += 14) {
-          const on = Math.sin(wx * 3.1 + wy * 1.7 + b.seed * 9) > 0.3;
-          ctx.fillStyle = on ? COL.win : "rgba(0,0,0,0.25)"; ctx.globalAlpha = on ? 0.6 + 0.3 * Math.sin(t / 900 + wx) : 1; ctx.fillRect(wx, wy, 7, 9);
-        }
-        ctx.globalAlpha = 1;
-      }
-      const road = ctx.createLinearGradient(0, H * 0.42, 0, H); road.addColorStop(0, "#3a3550"); road.addColorStop(1, "#5a4038");
-      ctx.fillStyle = road; ctx.fillRect(-20, H * 0.42, W + 40, H * 0.6);
-      ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(-20, H * 0.42, W + 40, 6);
-      ctx.fillStyle = "rgba(255,212,90,0.35)"; for (let x = 10; x < W; x += 50) ctx.fillRect(x, H * 0.72, 26, 4);
-      // street lamps
-      for (const lx of [W * 0.05, W * 0.95]) {
-        ctx.fillStyle = "#222b40"; ctx.fillRect(lx - 2, H * 0.22, 4, H * 0.2);
-        const gl = ctx.createRadialGradient(lx, H * 0.22, 2, lx, H * 0.22, 60); gl.addColorStop(0, "rgba(255,220,140,0.6)"); gl.addColorStop(1, "rgba(255,220,140,0)");
-        ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(lx, H * 0.22, 60, 0, Math.PI * 2); ctx.fill();
-      }
+      const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, COL.sky1); sky.addColorStop(0.3, COL.sky2); sky.addColorStop(0.31, COL.road); sky.addColorStop(1, "#55555a");
+      ctx.fillStyle = sky; ctx.fillRect(camX - 20, -20, W + 40, H + 40);
     };
     const hitCover = (x: number, y: number) => covers.find((c) => x > c.x && x < c.x + c.w && y > c.y && y < c.y + c.h);
+    // Feet-only collision: a body is blocked only where its feet would overlap an obstacle's own shape.
+    const blocked = (fx: number, fy: number, r = 9) => covers.some((c) => fx + r > c.x && fx - r < c.x + c.w && fy > c.y + c.h * 0.35 && fy < c.y + c.h + 3);
+    const HERO_FOOT = 34;
+    const footOf = (e: Enemy) => e.y + 28 * depth(e.y);
 
     const loop = (t: number) => {
       const dt = Math.min(2.5, (t - last) / 16.67);
@@ -266,27 +253,31 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       const timeLeft = Math.max(0, DURATION - elapsed);
       if (!done) survived = Math.min(DURATION, elapsed);
 
-      // --- player movement
+      // --- player movement (each axis on its own so the hero slides along obstacle edges)
       if (!done) {
         const sp = (inp.shield ? 2.4 : 4.2) * dt;
-        const nx = Math.max(28, Math.min(W - 28, p.x + inp.mx * sp));
-        const ny = Math.max(H * 0.55, Math.min(H - 40, p.y + inp.my * sp));
-        if (!covers.some((c) => nx > c.x - 14 && nx < c.x + c.w + 14 && ny > c.y && ny < c.y + c.h + 30)) { p.x = nx; p.y = ny; }
+        const nx = Math.max(28, Math.min(WW - 28, p.x + inp.mx * sp));
+        if (!blocked(nx, p.y + HERO_FOOT)) p.x = nx;
+        const ny = Math.max(H * 0.42, Math.min(H - 40, p.y + inp.my * sp));
+        if (!blocked(p.x, ny + HERO_FOOT)) p.y = ny;
         if (Math.hypot(inp.mx, inp.my) > 0.1) p.walk += 0.25 * dt;
       }
+      // camera follows the hero left/right
+      const camTarget = Math.max(0, Math.min(WW - W, p.x - W / 2));
+      camX += (camTarget - camX) * Math.min(1, 0.15 * dt);
       p.shieldT += ((inp.shield ? 1 : 0) - p.shieldT) * 0.3 * dt;
       if (done && p.dead > 0) p.dead = Math.min(1, p.dead + 0.04 * dt);
       p.recoil = Math.max(0, p.recoil - 0.1 * dt);
 
-      // --- aiming
+      // --- aiming (world coordinates)
       const gunX = p.x + 12, gunY = p.y - 8;
       if (inp.aiming && !inp.aimInit) {
         let best: Enemy | null = null, bd = 1e9;
         for (const e of enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < bd) { bd = d; best = e; } }
-        inp.aimX = best ? best.x : p.x; inp.aimY = best ? best.y : p.y - 250;
+        inp.aimX = best ? best.x : p.x; inp.aimY = best ? best.y - 20 : p.y - 250;
         inp.aimInit = true;
       }
-      inp.aimX = Math.max(0, Math.min(W, inp.aimX)); inp.aimY = Math.max(0, Math.min(H, inp.aimY));
+      inp.aimX = Math.max(camX, Math.min(camX + W, inp.aimX)); inp.aimY = Math.max(0, Math.min(H, inp.aimY));
       const targetA = inp.aiming ? Math.atan2(inp.aimY - gunY, inp.aimX - gunX) : -Math.PI / 3;
       p.gunA += (targetA - p.gunA) * 0.35 * dt;
       if (inp.fire) {
@@ -298,18 +289,32 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
         }
       }
 
-      // --- enemies
+      // --- enemies: 1 → 2 → 3 → 4 at once, they hunt the hero around obstacles
       spawnCd -= dt;
-      const maxE = elapsed < 20 ? 3 : 4;
-      if (!done && enemies.filter((e) => !e.dead).length < maxE && spawnCd <= 0) { spawnEnemy(); spawnCd = 50 + Math.random() * 40; }
+      const alive = enemies.filter((e) => !e.dead);
+      if (!done && alive.length < maxEnemiesAt(elapsed) && spawnCd <= 0) { spawnEnemy(); spawnCd = 120 + Math.random() * 60; }
       for (const e of enemies) {
         if (e.dead > 0) { e.dead += 0.035 * dt; continue; }
-        e.y += (e.ty - e.y) * 0.03 * dt;
-        if (Math.abs(e.y - e.ty) > 30) e.x += (e.tx - e.x) * 0.04 * dt;
-        else e.x += e.dir * 0.8 * dt;
-        if (e.x < 30 || e.x > W - 30) e.dir *= -1;
         e.flash = Math.max(0, e.flash - 0.08 * dt);
-        if (done || Math.abs(e.y - e.ty) > 30) continue;
+        const dx = p.x - e.x, dy = p.y - e.y, dist = Math.hypot(dx, dy) || 1;
+        const sp = 1.15 * dt;
+        let vx: number, vy: number;
+        if (dist > e.ty) { vx = (dx / dist) * sp; vy = (dy / dist) * sp; }
+        else { vx = e.dir * sp * 0.6; vy = 0; } // close enough: strafe
+        let moved = false;
+        const nx = Math.max(30, Math.min(WW - 30, e.x + vx));
+        if (!blocked(nx, footOf({ ...e, x: nx }))) { e.x = nx; moved = Math.abs(vx) > 0.05; }
+        const ny = Math.max(H * 0.3, Math.min(H - 50, e.y + vy));
+        if (!blocked(e.x, ny + 28 * depth(ny))) { e.y = ny; moved = moved || Math.abs(vy) > 0.05; }
+        if (!moved) {
+          // stuck behind an obstacle: walk sideways around it
+          const sx = e.x + e.dir * sp * 1.4;
+          if (sx > 30 && sx < WW - 30 && !blocked(sx, footOf(e))) e.x = sx; else e.dir *= -1;
+        }
+        if (dist <= e.ty && (e.x < camX + 20 || e.x > camX + W - 20)) e.dir = e.x < p.x ? 1 : -1;
+        // keep a little gap from each other
+        for (const o of alive) if (o !== e) { const ox = e.x - o.x, oy = e.y - o.y, od = Math.hypot(ox, oy); if (od > 0 && od < 40) { e.x += (ox / od) * 0.6 * dt; } }
+        if (done || e.y < H * 0.32 || dist > 640) continue;
         e.cool -= dt;
         if (e.cool <= 25 && e.warn === 0 && e.cool > 0) e.warn = 1;
         if (e.cool <= 0) {
@@ -322,7 +327,7 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       // --- bullets
       bullets = bullets.filter((b) => {
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-        if (b.life <= 0 || b.x < -30 || b.x > W + 30 || b.y < -30 || b.y > H + 30) return false;
+        if (b.life <= 0 || b.x < -30 || b.x > WW + 30 || b.y < -30 || b.y > H + 30) return false;
         const cv = hitCover(b.x, b.y);
         if (cv) { burst(b.x, b.y, "#d9c39a", 8, 2.5); return false; }
         if (b.enemy) {
@@ -343,7 +348,8 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
           }
         } else {
           for (const e of enemies) {
-            if (!e.dead && Math.hypot(b.x - e.x, b.y - (e.y - 20)) < 26) {
+            const sc = depth(e.y);
+            if (!e.dead && Math.hypot(b.x - e.x, b.y - (e.y - 22 * sc)) < 24 * sc + 4) {
               e.dead = 0.01; e.spin = b.vx >= 0 ? 1 : -1;
               kills++; score += 10; shake = Math.max(shake, 8);
               burst(e.x, e.y - 20, COL.red, 24, 6); burst(e.x, e.y - 20, COL.gold, 16, 5);
@@ -357,13 +363,18 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       });
       enemies = enemies.filter((e) => e.dead < 1);
 
-      // --- draw
+      // --- draw (world space, shifted by the camera)
       ctx.save();
       if (shake > 0) { ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake); shake *= 0.88; if (shake < 0.3) shake = 0; }
-      drawBg(t);
-      for (const e of enemies) if (e.y < H * 0.5) drawEnemy(e, t);
-      for (const c of covers) drawCover(c);
-      for (const e of enemies) if (e.y >= H * 0.5) drawEnemy(e, t);
+      ctx.translate(-camX, 0);
+      drawBg();
+      // depth-sorted: things lower on screen are drawn in front
+      const layers: { y: number; draw: () => void }[] = [];
+      for (const c of covers) if (c.x + c.w > camX - 40 && c.x < camX + W + 40) layers.push({ y: c.y + c.h, draw: () => drawCover(c) });
+      for (const e of enemies) layers.push({ y: footOf(e), draw: () => drawEnemy(e, t) });
+      layers.push({ y: p.y + HERO_FOOT, draw: () => drawHero(t) });
+      layers.sort((a, b) => a.y - b.y);
+      for (const l of layers) l.draw();
 
       // laser sight + crosshair (white ring, red ticks)
       if (inp.aiming && !done) {
@@ -379,8 +390,6 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
         ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(inp.aimX, inp.aimY, 3, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
-
-      drawHero(t);
 
       for (const b of bullets) {
         ctx.save(); const c = b.enemy ? COL.bulletEnemy : COL.bulletMe;
@@ -403,11 +412,21 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
         return f.life > 0;
       });
       ctx.globalAlpha = 1;
-      if (p.dead > 0) { ctx.fillStyle = `rgba(255,40,60,${0.35 * (1 - p.dead)})`; ctx.fillRect(0, 0, W, H); }
       ctx.restore();
 
+      // screen-space: arrows pointing at enemies that are off screen
+      for (const e of enemies) {
+        if (e.dead) continue;
+        const sx = e.x - camX;
+        if (sx >= 0 && sx <= W) continue;
+        const left = sx < 0, ax = left ? 14 : W - 14, ay = Math.max(40, Math.min(H - 40, e.y - 20));
+        ctx.save(); ctx.fillStyle = COL.red; ctx.shadowColor = COL.red; ctx.shadowBlur = 10; ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t / 120);
+        ctx.beginPath(); ctx.moveTo(left ? ax - 8 : ax + 8, ay); ctx.lineTo(left ? ax + 6 : ax - 6, ay - 10); ctx.lineTo(left ? ax + 6 : ax - 6, ay + 10); ctx.fill(); ctx.restore();
+      }
+      if (p.dead > 0) { ctx.fillStyle = `rgba(255,40,60,${0.35 * (1 - p.dead)})`; ctx.fillRect(0, 0, W, H); }
+
       if (t - lastHud > 100 || done) { lastHud = t; setHud({ score, time: timeLeft, kills }); }
-      if (timeLeft <= 0 && !done) { haptic("success"); floats.push({ x: W / 2, y: H / 2, text: "YOU SURVIVED!", life: 1.5, color: COL.gold }); finish(1200); }
+      if (timeLeft <= 0 && !done) { haptic("success"); floats.push({ x: p.x, y: H / 2, text: "YOU SURVIVED!", life: 1.5, color: COL.gold }); finish(1200); }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
