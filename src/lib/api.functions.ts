@@ -48,7 +48,11 @@ async function post<T>(path: string, data: RequestAuth): Promise<T> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(data),
   });
-  const result = await response.json().catch(() => ({}));
+  const isJson = (response.headers.get("content-type") ?? "").includes("application/json");
+  const result = isJson ? await response.json().catch(() => null) : null;
+  if (response.ok && (result === null || typeof result !== "object")) {
+    throw new Error("Game server is not reachable right now. Please try again later.");
+  }
   if (!response.ok) {
     const detail = result?.error;
     const message =

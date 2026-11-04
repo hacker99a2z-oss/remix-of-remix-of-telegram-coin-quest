@@ -173,7 +173,7 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
   return (
     <div className="rounded-2xl border bg-card p-3 text-center shadow-card">
       <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center rounded-full bg-muted">{icon}</div>
-      <p className="font-display text-xl tabular-nums">{value.toLocaleString()}</p>
+      <p className="font-display text-xl tabular-nums">{(value ?? 0).toLocaleString()}</p>
       <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
     </div>
   );
