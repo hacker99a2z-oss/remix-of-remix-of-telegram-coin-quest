@@ -1,18 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { adCooldownMs, coinsToUsd, maxEnemiesAt, prizeForRank, rewardFor, seasonEndsAt } from "@/lib/rules";
+import {
+  AD_COOLDOWN_MS, MIN_WITHDRAW_USD, DAILY_GAMES_GOAL, coinsToUsd, prizeForRank, randomBonusCoins,
+  randomEnemyTotal, rewardForKills, seasonEndsAt, wavePlan,
+} from "@/lib/rules";
 
 describe("game rewards & difficulty", () => {
-  it("surviving 90s pays 100 coins", () => expect(rewardFor(90)).toBe(100));
-  it("dying before 90s pays 0", () => {
-    expect(rewardFor(89)).toBe(0);
-    expect(rewardFor(10)).toBe(0);
+  it("each kill pays 10 coins", () => {
+    expect(rewardForKills(1)).toBe(10);
+    expect(rewardForKills(7)).toBe(70);
   });
-  it("enemies ramp 1 -> 2 -> 3 -> 4", () => {
-    expect(maxEnemiesAt(5)).toBe(1);
-    expect(maxEnemiesAt(20)).toBe(2);
-    expect(maxEnemiesAt(40)).toBe(3);
-    expect(maxEnemiesAt(80)).toBe(4);
+  it("can't earn for more than 12 kills", () => expect(rewardForKills(50)).toBe(120));
+  it("enemy total is always 9 to 12", () => {
+    expect(randomEnemyTotal(() => 0)).toBe(9);
+    expect(randomEnemyTotal(() => 0.999)).toBe(12);
   });
+  it("waves go 1, 1, 2, 3, then the rest", () => {
+    expect(wavePlan(9)).toEqual([1, 1, 2, 3, 2]);
+    expect(wavePlan(11)).toEqual([1, 1, 2, 3, 4]);
+    expect(wavePlan(12, () => 0).reduce((a, b) => a + b, 0)).toBe(12);
+  });
+  it("ad timer is 3 minutes", () => expect(AD_COOLDOWN_MS).toBe(180_000));
+  it("daily bonus needs 100 games and pays $0.01-$0.05", () => {
+    expect(DAILY_GAMES_GOAL).toBe(100);
+    expect(coinsToUsd(randomBonusCoins(() => 0))).toBe(0.01);
+    expect(coinsToUsd(randomBonusCoins(() => 0.9999))).toBe(0.05);
+  });
+  it("minimum withdraw is $0.02", () => expect(MIN_WITHDRAW_USD).toBe(0.02));
 });
 
 describe("rules", () => {
@@ -37,11 +50,5 @@ describe("rules", () => {
     const end = seasonEndsAt(t);
     expect(end - seasonEndsAt(end - 1)).toBe(0);
     expect(seasonEndsAt(end) - end).toBe(2 * 24 * 3600 * 1000);
-  });
-  it("survived full 90s -> next ad in 90s", () => {
-    expect(adCooldownMs(90)).toBe(90_000);
-  });
-  it("died at 30s -> 60s left + 90s = 150s", () => {
-    expect(adCooldownMs(30)).toBe(150_000);
   });
 });
