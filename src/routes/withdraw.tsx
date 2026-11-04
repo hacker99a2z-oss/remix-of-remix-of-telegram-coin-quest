@@ -30,7 +30,7 @@ function Withdraw() {
   const histFn = useServerFn(getWithdrawals);
   const reqFn = useServerFn(requestWithdraw);
   const { data: history } = useQuery({ queryKey: ["withdrawals"], queryFn: () => histFn({ data: auth() }) });
-  const [usd, setUsd] = useState("1");
+  const [usd, setUsd] = useState(String(MIN_WITHDRAW_USD));
   const [wallet, setWallet] = useState("");
   const [busy, setBusy] = useState(false);
 

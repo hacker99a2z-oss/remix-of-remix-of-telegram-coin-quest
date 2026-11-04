@@ -146,7 +146,7 @@ function Home() {
           <button
             onClick={claimBonus}
             disabled={busy || !me || daily < DAILY_GAMES_GOAL || me.bonusClaimedToday}
-            className="mt-2 w-full rounded-xl bg-success py-1.5 font-display text-sm text-success-foreground disabled:bg-muted disabled:text-muted-foreground active:scale-95 transition-transform"
+            className="mt-2 w-full rounded-xl bg-success py-1.5 font-display text-sm text-primary-foreground disabled:bg-muted disabled:text-muted-foreground active:scale-95 transition-transform"
           >
             {me?.bonusClaimedToday ? "Claimed today ✓" : `Claim $${coinsToUsd(BONUS_MIN_COINS).toFixed(2)}–$${coinsToUsd(BONUS_MAX_COINS).toFixed(2)}`}
           </button>
