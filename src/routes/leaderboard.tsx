@@ -6,7 +6,7 @@ import { Crown, Clock, Info } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { getLeaderboard } from "@/lib/api.functions";
 import { auth } from "@/lib/tg";
-import { LEADERBOARD_MIN_COINS, PRIZE_POOL_USD, PRIZE_WINNERS, LEADERBOARD_SHOWN } from "@/lib/rules";
+import { LEADERBOARD_MIN_COINS, PRIZE_POOL_USD, PRIZE_WINNERS } from "@/lib/rules";
 
 export const Route = createFileRoute("/leaderboard")({
   head: () => ({
@@ -63,6 +63,9 @@ function Leaderboard() {
               </div>
             ))}
           </div>
+          <p className="mt-2 flex items-center justify-center gap-1.5 rounded-xl border border-primary/30 bg-secondary py-2 text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5 text-primary" /> Earn <b className="text-foreground">{LEADERBOARD_MIN_COINS} coins</b> to join this round
+          </p>
         </div>
       </section>
 
@@ -108,10 +111,6 @@ function Leaderboard() {
         ))}
       </section>
 
-      <div className="mt-4 flex gap-2 rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
-        <Info className="h-4 w-4 shrink-0 text-primary" />
-        <p>Earn <b className="text-foreground">{LEADERBOARD_MIN_COINS}+ coins</b> this round to appear. Top {LEADERBOARD_SHOWN} are shown. Board resets every 2 days.</p>
-      </div>
     </AppShell>
   );
 }
