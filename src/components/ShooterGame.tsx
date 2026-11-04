@@ -2,7 +2,7 @@ import arenaBg from "@/assets/arena-bg.jpg";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Shield } from "lucide-react";
 import { haptic } from "@/lib/tg";
-import { maxEnemiesAt } from "@/lib/rules";
+import { COINS_PER_KILL, randomEnemyTotal, wavePlan } from "@/lib/rules";
 
 // Arena shooter: enemies come from the front (top), max 3-4 at once.
 // Left joystick moves the hero. Hold SHIELD to raise the shield in front.
@@ -10,7 +10,6 @@ import { maxEnemiesAt } from "@/lib/rules";
 // One hit kills (both sides). Cars/crates/barrels block bullets.
 // Every bullet (ours and theirs) takes 1 second to reach its target point.
 
-const DURATION = 90;
 const TRAVEL_FRAMES = 60; // ~1s at 60fps
 
 type Bullet = { x: number; y: number; vx: number; vy: number; enemy: boolean; life: number };
@@ -49,13 +48,13 @@ function randomCovers(WW: number, H: number, heroX: number, heroY: number): Cove
   return out;
 }
 
-export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number) => void }) {
+export function ShooterGame({ onEnd }: { onEnd: (score: number, kills: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const endRef = useRef(onEnd);
   endRef.current = onEnd;
   const input = useRef({ mx: 0, my: 0, shield: false, aiming: false, aimX: 0, aimY: 0, fire: false, aimInit: false });
-  const [hud, setHud] = useState({ score: 0, time: DURATION, kills: 0 });
+  const [hud, setHud] = useState({ score: 0, kills: 0, total: 0 });
   const [countdown, setCountdown] = useState(3);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const [shieldOn, setShieldOn] = useState(false);
@@ -91,7 +90,11 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
     const p = { x: WW / 2, y: H * 0.8, walk: 0, dead: 0, shieldT: 0, recoil: 0, gunA: -Math.PI / 2 };
     let camX = WW / 2 - W / 2;
     let enemies: Enemy[] = [], bullets: Bullet[] = [], parts: Part[] = [], floats: Float[] = [];
-    let score = 0, kills = 0, shake = 0, spawnCd = 30, done = false, lastHud = 0, raf = 0, survived = 0;
+    let score = 0, kills = 0, shake = 0, spawnCd = 30, done = false, lastHud = 0, raf = 0;
+    // This match: random 9–12 enemies, sent in waves 1, 1, 2, 3, 4…; next wave comes once the last is cleared.
+    const total = randomEnemyTotal();
+    const waves = wavePlan(total);
+    let waveIdx = 0, waveQueue = 0;
     const covers = randomCovers(WW, H, p.x, p.y);
     const start = performance.now();
     let last = start;
@@ -116,7 +119,7 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
     const finish = (delay: number) => {
       if (done) return;
       done = true;
-      setTimeout(() => endRef.current(score, survived), delay);
+      setTimeout(() => endRef.current(score, kills), delay);
     };
 
     // Red/black armored soldier facing the viewer. gunA = gun angle in world space.
@@ -274,8 +277,6 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       const dt = Math.min(2.5, (t - last) / 16.67);
       last = t;
       const elapsed = (t - start) / 1000;
-      const timeLeft = Math.max(0, DURATION - elapsed);
-      if (!done) survived = Math.min(DURATION, elapsed);
 
       // --- player movement (each axis on its own so the hero slides along obstacle edges)
       if (!done) {
@@ -316,7 +317,8 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       // --- enemies: 1 → 2 → 3 → 4 at once, they hunt the hero around obstacles
       spawnCd -= dt;
       const alive = enemies.filter((e) => !e.dead);
-      if (!done && alive.length < maxEnemiesAt(elapsed) && spawnCd <= 0) { spawnEnemy(); spawnCd = 120 + Math.random() * 60; }
+      if (!done && alive.length === 0 && waveQueue === 0 && waveIdx < waves.length) { waveQueue = waves[waveIdx++] ?? 1; spawnCd = waveIdx === 1 ? 30 : 70; }
+      if (!done && waveQueue > 0 && spawnCd <= 0) { spawnEnemy(); waveQueue--; spawnCd = 20; }
       for (const e of enemies) {
         if (e.dead > 0) { e.dead += 0.035 * dt; continue; }
         e.flash = Math.max(0, e.flash - 0.08 * dt);
@@ -377,7 +379,7 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
               e.dead = 0.01; e.spin = b.vx >= 0 ? 1 : -1;
               kills++; score += 10; shake = Math.max(shake, 8);
               burst(e.x, e.y - 20, COL.red, 24, 6); burst(e.x, e.y - 20, COL.gold, 16, 5);
-              floats.push({ x: e.x, y: e.y - 60, text: "+10", life: 1, color: COL.gold });
+              floats.push({ x: e.x, y: e.y - 60, text: `+${COINS_PER_KILL}`, life: 1, color: COL.gold });
               haptic("success");
               return false;
             }
@@ -449,8 +451,8 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
       }
       if (p.dead > 0) { ctx.fillStyle = `rgba(255,40,60,${0.35 * (1 - p.dead)})`; ctx.fillRect(0, 0, W, H); }
 
-      if (t - lastHud > 100 || done) { lastHud = t; setHud({ score, time: timeLeft, kills }); }
-      if (timeLeft <= 0 && !done) { haptic("success"); floats.push({ x: p.x, y: H / 2, text: "YOU SURVIVED!", life: 1.5, color: COL.gold }); finish(1200); }
+      if (t - lastHud > 100 || done) { lastHud = t; setHud({ score, kills, total }); }
+      if (kills >= total && !done) { haptic("success"); floats.push({ x: p.x, y: H / 2, text: "ALL CLEAR!", life: 1.5, color: COL.gold }); finish(1200); }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -493,12 +495,12 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background select-none">
       <div className="flex items-center justify-between gap-3 px-4 pt-4">
-        <div className="font-display text-3xl text-gold-gradient">{hud.score}</div>
-        <div className="text-sm text-muted-foreground">💀 {hud.kills}</div>
-        <div className="font-display text-xl tabular-nums">⏱ {Math.ceil(hud.time)}s</div>
+        <div className="font-display text-3xl text-gold-gradient">+{hud.kills * COINS_PER_KILL}</div>
+        <div className="text-sm text-muted-foreground">Score {hud.score}</div>
+        <div className="font-display text-xl tabular-nums">💀 {hud.kills}/{hud.total || "…"}</div>
       </div>
       <div className="mx-4 mt-3 h-2 overflow-hidden rounded-full bg-muted">
-        <div className="h-full bg-gold transition-[width] duration-200" style={{ width: `${(hud.time / DURATION) * 100}%` }} />
+        <div className="h-full bg-gold transition-[width] duration-200" style={{ width: `${hud.total ? (hud.kills / hud.total) * 100 : 0}%` }} />
       </div>
       <div ref={wrapRef} className="relative mt-3 flex-1 touch-none">
         <canvas ref={canvasRef} className="absolute inset-0" />
@@ -506,7 +508,7 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, survived: number
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/50">
             <div key={countdown} className="font-display text-8xl text-gold-gradient animate-in zoom-in-50 fade-in duration-500">{countdown}</div>
             <p className="px-6 text-center text-foreground">Move with the left stick — walk left or right to explore. Hold 🛡️ to block. Hold 🎯, drag to aim, release to shoot!</p>
-            <p className="px-6 text-center font-display text-lg text-primary">Survive all 90s to win 100 coins</p>
+            <p className="px-6 text-center font-display text-lg text-primary">Take down 9–12 enemies · +10 coins each</p>
           </div>
         )}
         {/* joystick */}
