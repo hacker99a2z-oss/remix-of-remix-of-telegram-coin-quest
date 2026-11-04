@@ -43,7 +43,13 @@ function Refer() {
   return (
     <AppShell title="Invite Friends">
       <section className="rounded-3xl border border-primary/40 bg-card p-4 shadow-glow">
-        <p className="mb-2 text-xs text-muted-foreground">Your invite link</p>
+        <div className="mb-3 flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-coral"><Gift className="h-6 w-6 text-accent-foreground" /></span>
+          <div>
+            <p className="text-xs text-muted-foreground">Your invite link</p>
+            <p className="font-display text-lg leading-tight"><span className="text-gold-gradient">+{REFERRAL_REWARD} coins</span> per friend</p>
+          </div>
+        </div>
         <div className="truncate rounded-xl border border-dashed border-primary/40 bg-muted px-3 py-3 font-mono text-xs">{link || "…"}</div>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <button onClick={copy} disabled={!me} className="flex items-center justify-center gap-2 rounded-2xl border bg-secondary py-3 font-medium active:scale-95 transition-transform">
