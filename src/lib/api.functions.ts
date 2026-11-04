@@ -1,8 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
   COINS_PER_USD,
-  rewardFor,
-  adCooldownMs,
+  rewardForKills,
+  AD_COOLDOWN_MS,
+  DAILY_GAMES_GOAL,
+  randomBonusCoins,
   LEADERBOARD_MIN_COINS,
   LEADERBOARD_SHOWN,
   MAX_PENDING_AD_PLAYS,
@@ -47,6 +49,8 @@ function view(p: any) {
     referralCount: p.referral_count as number,
     photoUrl: (p.photo_url as string | null) ?? null,
     adReadyAt: p.ad_ready_at ? new Date(p.ad_ready_at).getTime() : 0,
+    dailyGames: p.daily_games_date === today() ? (p.daily_games as number) : 0,
+    bonusClaimedToday: p.bonus_claimed_date === today(),
   };
 }
 
@@ -78,17 +82,17 @@ export const getMe = createServerFn({ method: "POST" })
 export const finishGame = createServerFn({ method: "POST" })
   .inputValidator(authInput((o) => ({
     score: Math.max(0, Math.min(100000, Math.floor(Number(o.score) || 0))),
-    survived: Math.max(0, Math.min(90, Number(o.survived) || 0)),
+    kills: Math.max(0, Math.floor(Number(o.kills) || 0)),
   })))
   .handler(async ({ data }) => {
     const { user, db } = await ctx(data);
     const { data: before } = await db.from("players").select("last_play_date").eq("tg_id", user.id).single();
     const wasFree = before?.last_play_date !== today();
-    const reward = rewardFor(data.survived);
+    const reward = rewardForKills(data.kills);
     const { error } = await db.rpc("finish_game", { p_tg_id: user.id, p_score: data.score, p_reward: reward });
     if (error) throw new Error(error.message.includes("no plays") ? "No plays left — watch an ad to play again" : error.message);
-    // Daily free game: no ad timer. Ad-unlocked game: timer based on how long the hero survived.
-    const readyAt = wasFree ? null : new Date(Date.now() + adCooldownMs(data.survived)).toISOString();
+    // Daily free game: no ad timer. Every ad-unlocked game: 3 minute timer.
+    const readyAt = wasFree ? null : new Date(Date.now() + AD_COOLDOWN_MS).toISOString();
     const { data: p } = await db.from("players").update({ ad_ready_at: readyAt }).eq("tg_id", user.id).select("*").single();
     return { ...view(p), reward };
   });
@@ -103,6 +107,17 @@ export const grantAdPlay = createServerFn({ method: "POST" })
     const extra = Math.min(MAX_PENDING_AD_PLAYS, p.extra_plays + 1);
     const { data: up } = await db.from("players").update({ extra_plays: extra }).eq("tg_id", user.id).select("*").single();
     return view(up);
+  });
+
+export const claimDailyBonus = createServerFn({ method: "POST" })
+  .inputValidator(authInput())
+  .handler(async ({ data }) => {
+    const { user, db } = await ctx(data);
+    const bonus = randomBonusCoins();
+    const { error } = await db.rpc("claim_daily_bonus", { p_tg_id: user.id, p_goal: DAILY_GAMES_GOAL, p_coins: bonus });
+    if (error) throw new Error(error.message.includes("not available") ? `Play ${DAILY_GAMES_GOAL} games today to claim` : error.message);
+    const { data: p } = await db.from("players").select("*").eq("tg_id", user.id).single();
+    return { ...view(p), bonus };
   });
 
 export const getLeaderboard = createServerFn({ method: "POST" })
