@@ -28,7 +28,7 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
           </div>
           <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5">
             <span className="inline-block h-5 w-5 rounded-full bg-gold shadow-glow" />
-            <span className="font-display text-lg tabular-nums">{data ? data.coins.toLocaleString() : "…"}</span>
+            <span className="font-display text-lg tabular-nums">{typeof data?.coins === "number" ? data.coins.toLocaleString() : "…"}</span>
           </div>
         </div>
         <h1 className="mt-4 text-2xl">{title}</h1>
