@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Play, Tv, Trophy, Swords, Timer, Shield, Crosshair, Skull, Gift, Target } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { ShooterGame } from "@/components/ShooterGame";
 import { usePlayer } from "@/hooks/use-player";
-import { finishGame, grantAdPlay, claimDailyBonus } from "@/lib/api.functions";
+import { finishGame, grantAdPlay, claimDailyBonus, startGame } from "@/lib/api.functions";
 import { auth, haptic, showRewardAd } from "@/lib/tg";
 import { COINS_PER_KILL, MIN_ENEMIES, MAX_ENEMIES, DAILY_GAMES_GOAL, BONUS_MIN_COINS, BONUS_MAX_COINS, coinsToUsd } from "@/lib/rules";
 import arenaBg from "@/assets/arena-bg.jpg";
@@ -27,9 +26,7 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const { data: me, isLoading, error, setPlayer } = usePlayer();
-  const finish = useServerFn(finishGame);
-  const adPlay = useServerFn(grantAdPlay);
-  const claim = useServerFn(claimDailyBonus);
+  const [game, setGame] = useState<{ sessionId: string; enemyTotal: number } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [result, setResult] = useState<{ score: number; reward: number; kills: number } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,7 +39,7 @@ function Home() {
   const onEnd = async (score: number, kills: number) => {
     setPlaying(false);
     try {
-      const p = await finish({ data: { ...auth(), score, kills } });
+      const p = await finishGame({ ...auth(), sessionId: game!.sessionId, score, kills });
       setPlayer(p);
       setResult({ score, reward: p.reward, kills });
     } catch (e: any) {
@@ -55,7 +52,7 @@ function Home() {
     try {
       const ok = await showRewardAd();
       if (!ok) throw new Error("Watch the full ad to unlock a game");
-      const p = await adPlay({ data: auth() });
+      const p = await grantAdPlay(auth());
       setPlayer(p);
       haptic("success");
       toast.success("Extra game unlocked!");
@@ -69,7 +66,7 @@ function Home() {
   const claimBonus = async () => {
     setBusy(true);
     try {
-      const p = await claim({ data: auth() });
+      const p = await claimDailyBonus(auth());
       setPlayer(p);
       haptic("success");
       toast.success(`Bonus claimed: $${coinsToUsd(p.bonus).toFixed(3)}!`);
@@ -84,7 +81,7 @@ function Home() {
 
   return (
     <AppShell title="Battle Arena">
-      {playing && <ShooterGame onEnd={onEnd} />}
+      {playing && game && <ShooterGame enemyTotal={game.enemyTotal} onEnd={onEnd} />}
 
       <section className="relative overflow-hidden rounded-3xl border border-primary/30 shadow-card">
         <img src={arenaBg} alt="Military base arena" className="absolute inset-0 h-full w-full object-cover object-top" />
@@ -103,11 +100,17 @@ function Home() {
               <p className="text-sm text-destructive">{(error as Error).message}</p>
             ) : canPlay ? (
               <button
-                onClick={() => { haptic("medium"); setResult(null); setPlaying(true); }}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gold py-4 font-display text-2xl text-primary-foreground shadow-glow animate-pulse-ring active:scale-95 transition-transform"
+                disabled={busy}
+                onClick={async () => {
+                  haptic("medium"); setBusy(true);
+                  try { const started = await startGame(auth()); setGame(started); setResult(null); setPlaying(true); }
+                  catch (e: any) { toast.error(e.message); }
+                  finally { setBusy(false); }
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gold py-4 font-display text-2xl text-primary-foreground shadow-glow animate-pulse-ring active:scale-95 transition-transform disabled:opacity-70"
               >
                 <Play className="h-6 w-6 fill-current" />
-                {me!.canPlayFree ? "Play free game" : `Play (${me!.extraPlays} left)`}
+                {busy ? "Starting…" : me!.canPlayFree ? "Play free game" : `Play (${me!.extraPlays} left)`}
               </button>
             ) : (
               <button

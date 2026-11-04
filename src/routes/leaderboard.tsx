@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { Crown, Clock, Info } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -34,8 +33,7 @@ function useCountdown(to?: number) {
 type Row = { rank: number; tgId: number; name: string; coins: number; prize: number; isMe: boolean };
 
 function Leaderboard() {
-  const fn = useServerFn(getLeaderboard);
-  const { data, isLoading } = useQuery({ queryKey: ["leaderboard"], queryFn: () => fn({ data: auth() }), refetchInterval: 30_000 });
+  const { data, isLoading } = useQuery({ queryKey: ["leaderboard"], queryFn: () => getLeaderboard(auth()), refetchInterval: 30_000 });
   const left = useCountdown(data?.seasonEndsAt);
   const list = (data?.list ?? []) as Row[];
   const podium = [list[1], list[0], list[2]];

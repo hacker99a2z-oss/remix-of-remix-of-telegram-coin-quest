@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "coin-rush-api",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-04",
+  "observability": { "enabled": true },
+  "queues": {
+    "producers": [{ "binding": "PAYOUT_QUEUE", "queue": "coin-rush-payouts" }],
+    "consumers": [
+      {
+        "queue": "coin-rush-payouts",
+        "max_batch_size": 10,
+        "max_retries": 5,
+        "dead_letter_queue": "coin-rush-payouts-dlq",
+      },
+    ],
+  },
+  "triggers": { "crons": ["*/5 * * * *"] },
+}

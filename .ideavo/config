@@ -1,17 +1,13 @@
 {
   "systemSetup": [],
   "templateName": "custom",
-  "projectDependencies": [
-    { "name": "Install Dependencies", "command": "bun install" }
-  ],
+  "projectDependencies": [{ "name": "Install Dependencies", "command": "bun install" }],
   "codeChecks": [
-    { "name": "Type Check", "command": "bun run tsc --noEmit" },
+    { "name": "Type Check", "command": "bun run typecheck" },
     { "name": "Lint Code", "command": "bun run lint" },
     { "name": "Run Tests", "command": "bun run test" }
   ],
-  "buildSteps": [
-    { "name": "Build Project", "command": "bun run build" }
-  ],
+  "buildSteps": [{ "name": "Build Project", "command": "bun run build" }],
   "runStep": [
     {
       "name": "Run Dev Server",
@@ -19,19 +15,25 @@
       "port": "4000"
     }
   ],
-  "deploySteps": [],
+  "deploySteps": [
+    { "name": "Migrate Turso Database", "command": "bun run db:migrate" },
+    { "name": "Import Existing Player Data", "command": "bun run db:import-supabase" },
+    { "name": "Provision Payout Queues", "command": "bun run queues:ensure" },
+    { "name": "Deploy API Worker", "command": "bun run deploy:api" },
+    { "name": "Bind Worker Secrets", "command": "bun run deploy:secrets" },
+    { "name": "Deploy Pages Frontend", "command": "bun run deploy:pages" }
+  ],
   "cleanupFiles": [
     "node_modules",
     "dist",
     "dist-ssr",
     ".output",
+    "coverage",
     ".vinxi",
     ".tanstack",
     ".nitro",
     ".wrangler"
   ],
   "packageManager": "bun",
-  "envPaths": [
-    { "name": "default", "path": ".env" }
-  ]
+  "envPaths": [{ "name": "default", "path": ".env" }]
 }
