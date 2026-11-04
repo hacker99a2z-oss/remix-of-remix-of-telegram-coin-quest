@@ -317,7 +317,7 @@ export function ShooterGame({ onEnd }: { onEnd: (score: number, kills: number) =
       // --- enemies: 1 → 2 → 3 → 4 at once, they hunt the hero around obstacles
       spawnCd -= dt;
       const alive = enemies.filter((e) => !e.dead);
-      if (!done && alive.length === 0 && waveQueue === 0 && waveIdx < waves.length) { waveQueue = waves[waveIdx++]; spawnCd = waveIdx === 1 ? 30 : 70; }
+      if (!done && alive.length === 0 && waveQueue === 0 && waveIdx < waves.length) { waveQueue = waves[waveIdx++] ?? 1; spawnCd = waveIdx === 1 ? 30 : 70; }
       if (!done && waveQueue > 0 && spawnCd <= 0) { spawnEnemy(); waveQueue--; spawnCd = 20; }
       for (const e of enemies) {
         if (e.dead > 0) { e.dead += 0.035 * dt; continue; }

@@ -21,7 +21,7 @@ export function wavePlan(total: number, rand = Math.random): number[] {
   const waves: number[] = [];
   let left = total;
   for (let i = 0; left > 0; i++) {
-    const want = i < start.length ? start[i] : 2 + Math.floor(rand() * 3);
+    const want = i < start.length ? start[i]! : 2 + Math.floor(rand() * 3);
     const n = Math.min(want, left);
     waves.push(n);
     left -= n;
