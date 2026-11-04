@@ -18,8 +18,11 @@ export type Database = {
         Row: {
           ad_ready_at: string | null
           best_score: number
+          bonus_claimed_date: string | null
           coins: number
           created_at: string
+          daily_games: number
+          daily_games_date: string | null
           extra_plays: number
           first_name: string
           games_played: number
@@ -36,8 +39,11 @@ export type Database = {
         Insert: {
           ad_ready_at?: string | null
           best_score?: number
+          bonus_claimed_date?: string | null
           coins?: number
           created_at?: string
+          daily_games?: number
+          daily_games_date?: string | null
           extra_plays?: number
           first_name?: string
           games_played?: number
@@ -54,8 +60,11 @@ export type Database = {
         Update: {
           ad_ready_at?: string | null
           best_score?: number
+          bonus_claimed_date?: string | null
           coins?: number
           created_at?: string
+          daily_games?: number
+          daily_games_date?: string | null
           extra_plays?: number
           first_name?: string
           games_played?: number
@@ -106,6 +115,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_daily_bonus: {
+        Args: { p_coins: number; p_goal: number; p_tg_id: number }
+        Returns: boolean
+      }
       current_season: { Args: never; Returns: number }
       finish_game: {
         Args: { p_reward: number; p_score: number; p_tg_id: number }
