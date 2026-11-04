@@ -8,3 +8,4 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+- Declare Vite env vars in src/vite-env.d.ts: tsconfig uses noPropertyAccessFromIndexSignature, and the auto-generated backend client reads import.meta.env with dot access.
